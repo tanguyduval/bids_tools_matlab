@@ -15,6 +15,19 @@ function BIDS = bids_parser(bids_dir)
 %        (type)               -- P-by-1 structure with <type> files
 %           filename          -- name of the nifti file
 %          (parameter)        -- content of file.json (e.g. FlipAngle)
+%
+% FILTER BY SUBJECT NAME AND SESSION:
+%   SCAN = BIDS.subjects(strcmp({BIDS.subjects.name},'MATHIAS') & strcmp({BIDS.subjects.session},'postsurgery'))
+%
+% FILTER ONE SUBJECT BY MODALITY:
+%   MODALITY = SCAN.anat(strcmp({SCAN.anat.modality},'FLAIR'));
+%   filepath = fullfile(SCAN.path,'anat',MODALITY.filename);
+%
+% FILTER ALL SUBJECTS BY MODALITY:
+%   filepath={}; 
+%   for iscan = 1:length(BIDS.subjects)
+%       filepath{iscan} =  fullfile(BIDS.subjects(iscan).path, 'anat', BIDS.subjects(iscan).anat(1).filename); 
+%   end
 
 %% Read study infos
 if exist(fullfile(bids_dir,'participants.tsv'),'file')
@@ -47,11 +60,9 @@ if isempty(subjects), warning(['no subjects found in ' bids_dir]); end
 for isub = 1:length(subjects)
    subdir = fullfile(bids_dir,['sub-' subjects{isub}]);
    ses_list = sct_tools_ls(fullfile(subdir,'ses-*'));
-   if isempty(ses_list), seslist{1}=[]; end
+   if isempty(ses_list), ses_list{1}=[]; end
    %% Loop over sessions
    for sesj=1:length(ses_list)
-       sesdir = fullfile(subdir,ses_list{sesj});
-       [im_list, im_path] = sct_tools_ls(fullfile(sesdir,'*.nii.gz'),0,1,2,1);
        % read session info if exists
        try
            sesinfo = readtable(fullfile(bids_dir,['sub-' subjects{isub}],['sub-' subjects{isub} '_sessions.tsv']),'delimiter','\t');
@@ -60,17 +71,43 @@ for isub = 1:length(subjects)
        BIDS.subjects(end+1).name = subjects{isub};
        BIDS.subjects(end).path = fullfile(bids_dir,['sub-' subjects{isub}],strrep(ses_list{sesj},'ses-',''));
        BIDS.subjects(end).session = strrep(ses_list{sesj},'ses-','');
-
+       if isempty(BIDS.subjects(end).session), BIDS.subjects(end).session='none'; end
+       
+       %% Loop over nifti files
+       sesdir = fullfile(subdir,ses_list{sesj});
+       [im_list, im_path] = sct_tools_ls(fullfile(sesdir,'*.nii.gz'),0,1,2,1);
        for imj = 1:length(im_list)
+           % type and filename
            [~,type] = fileparts(fileparts(im_path{imj}));
            if isfield(BIDS.subjects(end),type)
              BIDS.subjects(end).(type)(end+1).filename = im_list{imj};
              else
               BIDS.subjects(end).(type).filename = im_list{imj};
            end
-           props = loadjson(strrep(fullfile(im_path{imj},im_list{imj}),'.nii.gz','.json'));
-           for ff = fieldnames(props)'
-               BIDS.subjects(end).(type)(end).(ff{1}) = props.(ff{1});
+           
+           % parse filename
+           labels = regexp(BIDS.subjects(end).anat(end).filename,[...
+               '^sub-[a-zA-Z0-9]+' ...              % sub-<participant_label>
+               '(?<ses>_ses-[a-zA-Z0-9]+)?' ...     % ses-<label>
+               '(?<acq>_acq-[a-zA-Z0-9]+)?' ...     % acq-<label>
+               '(?<run>_run-[a-zA-Z0-9]+)?' ...     % run-<index>
+               '(?<rec>_rec-[a-zA-Z0-9]+)?' ...     % rec-<label>
+               '_(?<modality>[a-zA-Z0-9]+)?' ...    % <modality>
+               '\.nii(\.gz)?$'],'names');           % NIfTI file extension
+            
+           for ff = fieldnames(labels)'
+               BIDS.subjects(end).(type)(end).(ff{1}) = strrep(strrep(labels.(ff{1}),'_',''),[ff{1} '-'],'');
+           end
+           
+           % read acquisition properties
+           infofile = strrep(fullfile(im_path{imj},im_list{imj}),'.nii.gz','.json');
+           if exist(infofile,'file')
+               props = loadjson(infofile);
+               for ff = fieldnames(props)'
+                   BIDS.subjects(end).(type)(end).meta.(ff{1}) = props.(ff{1});
+               end
+           else
+               warning(['no json file associated with ' fullfile(im_path{imj},im_list{imj})])
            end
        end
        
