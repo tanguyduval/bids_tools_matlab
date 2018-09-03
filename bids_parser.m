@@ -86,13 +86,13 @@ for isub = 1:length(subjects)
            end
            
            % parse filename
-           labels = regexp(BIDS.subjects(end).anat(end).filename,[...
+           labels = regexp(BIDS.subjects(end).(type)(end).filename,[...
                '^sub-[a-zA-Z0-9]+' ...              % sub-<participant_label>
                '(?<ses>_ses-[a-zA-Z0-9]+)?' ...     % ses-<label>
                '(?<acq>_acq-[a-zA-Z0-9]+)?' ...     % acq-<label>
                '(?<run>_run-[a-zA-Z0-9]+)?' ...     % run-<index>
                '(?<rec>_rec-[a-zA-Z0-9]+)?' ...     % rec-<label>
-               '_(?<modality>[a-zA-Z0-9]+)?' ...    % <modality>
+               '.*_(?<modality>[a-zA-Z0-9]+)?' ...    % <modality>
                '\.nii(\.gz)?$'],'names');           % NIfTI file extension
             
            for ff = fieldnames(labels)'
