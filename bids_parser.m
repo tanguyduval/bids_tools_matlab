@@ -69,7 +69,7 @@ for isub = 1:length(subjects)
        end
 
        BIDS.subjects(end+1).name = subjects{isub};
-       BIDS.subjects(end).path = fullfile(bids_dir,['sub-' subjects{isub}],strrep(ses_list{sesj},'ses-',''));
+       BIDS.subjects(end).path = fullfile(bids_dir,['sub-' subjects{isub}],ses_list{sesj});
        BIDS.subjects(end).session = strrep(ses_list{sesj},'ses-','');
        if isempty(BIDS.subjects(end).session), BIDS.subjects(end).session='none'; end
        
@@ -95,6 +95,9 @@ for isub = 1:length(subjects)
                '.*_(?<modality>[a-zA-Z0-9]+)?' ...    % <modality>
                '\.nii(\.gz)?$'],'names');           % NIfTI file extension
             
+           if isempty(labels)
+               continue
+           end
            for ff = fieldnames(labels)'
                BIDS.subjects(end).(type)(end).(ff{1}) = strrep(strrep(labels.(ff{1}),'_',''),[ff{1} '-'],'');
            end
@@ -107,7 +110,7 @@ for isub = 1:length(subjects)
                    BIDS.subjects(end).(type)(end).meta.(ff{1}) = props.(ff{1});
                end
            else
-               warning(['no json file associated with ' fullfile(im_path{imj},im_list{imj})])
+               disp(['no json file associated with ' fullfile(im_path{imj},im_list{imj})])
            end
        end
        
