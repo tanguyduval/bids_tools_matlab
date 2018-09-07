@@ -80,7 +80,7 @@ for isub = 1:length(subjects)
 
        BIDS.subjects(end+1).name = subjects{isub};
        BIDS.subjects(end).session = strrep(ses_list{sesj},'ses-','');
-       BIDS.subjects(end).path = fullfile(bids_dir,['sub-' subjects{isub}],strrep(ses_list{sesj},'ses-',''));
+       BIDS.subjects(end).path = fullfile(bids_dir,['sub-' subjects{isub}],ses_list{sesj});
        if isempty(BIDS.subjects(end).session), BIDS.subjects(end).session='none'; end
        if ~isempty(sessionstsv) && isfield(sessionstsv,'session_id')
            ind = strcmp(strrep(sessionstsv.session_id,'ses-',''),strrep(ses_list{sesj},'ses-',''));
@@ -108,15 +108,18 @@ for isub = 1:length(subjects)
            end
            
            % parse filename
-           labels = regexp(BIDS.subjects(end).anat(end).filename,[...
+           labels = regexp(BIDS.subjects(end).(type)(end).filename,[...
                '^sub-[a-zA-Z0-9]+' ...              % sub-<participant_label>
                '(?<ses>_ses-[a-zA-Z0-9]+)?' ...     % ses-<label>
                '(?<acq>_acq-[a-zA-Z0-9]+)?' ...     % acq-<label>
                '(?<run>_run-[a-zA-Z0-9]+)?' ...     % run-<index>
                '(?<rec>_rec-[a-zA-Z0-9]+)?' ...     % rec-<label>
-               '_(?<modality>[a-zA-Z0-9]+)?' ...    % <modality>
+               '.*_(?<modality>[a-zA-Z0-9]+)?' ...    % <modality>
                '\.nii(\.gz)?$'],'names');           % NIfTI file extension
             
+           if isempty(labels)
+               continue
+           end
            for ff = fieldnames(labels)'
                BIDS.subjects(end).(type)(end).(ff{1}) = strrep(strrep(labels.(ff{1}),'_',''),[ff{1} '-'],'');
            end
@@ -129,7 +132,7 @@ for isub = 1:length(subjects)
                    BIDS.subjects(end).(type)(end).meta.(ff{1}) = props.(ff{1});
                end
            else
-               warning(['no json file associated with ' fullfile(im_path{imj},im_list{imj})])
+               disp(['no json file associated with ' fullfile(im_path{imj},im_list{imj})])
            end
        end
        
