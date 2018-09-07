@@ -34,21 +34,19 @@ if exist(fullfile(bids_dir,'participants.tsv'),'file')
     try
       BIDS.participants = readtable(fullfile(bids_dir,'participants.tsv'),'delimiter','\t');
     catch err
-        disp(err.message)
-        warning(['Could not read participants.tsv: ' err.message])
+        disp(['Could not read participants.tsv: ' err.message])
     end
 else
-    warning(['Could not find ' fullfile(bids_dir,'participants.tsv')]);
+    disp(['Could not find ' fullfile(bids_dir,'participants.tsv')]);
 end
 if exist(fullfile(bids_dir,'dataset_description.json'),'file')
     try
         BIDS.data_description = loadjson(fullfile(bids_dir,'dataset_description.json'));
     catch err
-        disp(err.message)
-        warning(['Could not read dataset_description.json: ' err.message])
+        disp(['Could not read dataset_description.json: ' err.message])
     end
 else
-    warning(['Could not find ' fullfile(bids_dir,'dataset_description.json')]);
+    disp(['Could not find ' fullfile(bids_dir,'dataset_description.json')]);
 end
 
 BIDS.path = bids_dir;
@@ -61,6 +59,18 @@ for isub = 1:length(subjects)
    subdir = fullfile(bids_dir,['sub-' subjects{isub}]);
    ses_list = sct_tools_ls(fullfile(subdir,'ses-*'));
    if isempty(ses_list), ses_list{1}=[]; end
+   
+   %% Read sessions info
+   sessionstsv = fullfile(subdir,['sub-' subjects{isub} '_sessions.tsv']);
+   if exist(sessionstsv,'file')
+       try
+           sessionstsv = readtable(sessionstsv,'delimiter','\t');
+       catch err
+           disp(['Could not read sub-' subjects{isub} '_sessions.tsv: ' err.message])
+       end
+   else
+       sessionstsv = [];
+   end
    %% Loop over sessions
    for sesj=1:length(ses_list)
        % read session info if exists
@@ -69,13 +79,25 @@ for isub = 1:length(subjects)
        end
 
        BIDS.subjects(end+1).name = subjects{isub};
-       BIDS.subjects(end).path = fullfile(bids_dir,['sub-' subjects{isub}],strrep(ses_list{sesj},'ses-',''));
        BIDS.subjects(end).session = strrep(ses_list{sesj},'ses-','');
+       BIDS.subjects(end).path = fullfile(bids_dir,['sub-' subjects{isub}],strrep(ses_list{sesj},'ses-',''));
        if isempty(BIDS.subjects(end).session), BIDS.subjects(end).session='none'; end
-       
+       if ~isempty(sessionstsv) && isfield(sessionstsv,'session_id')
+           ind = strcmp(strrep(sessionstsv.session_id,'ses-',''),strrep(ses_list{sesj},'ses-',''));
+           if any(ind)
+               for ff=setdiff(fieldnames(sessionstsv),'session_id')'
+                BIDS.subjects(end).tsv.(ff{1}) = sessionstsv.(ff{1}){ind};
+               end
+           else
+               warning(['could not find session_id ' ses_list{sesj} ' in ' 'sub-' subjects{isub} '_sessions.tsv'])
+           end
+       end
+              
        %% Loop over nifti files
        sesdir = fullfile(subdir,ses_list{sesj});
        [im_list, im_path] = sct_tools_ls(fullfile(sesdir,'*.nii.gz'),0,1,2,1);
+       [~,types] = cellfun(@(x) fileparts(x(1:end-1)), im_path, 'uni', false);
+       if isub==1 && sesj==1, BIDS.datatype = unique(types); end
        for imj = 1:length(im_list)
            % type and filename
            [~,type] = fileparts(fileparts(im_path{imj}));
@@ -127,7 +149,7 @@ end
 end
 
 function obj = readtable(file, varargin)
-
+% Octave compatible readtable
   if nargin >= 1
       [~, n, e] = fileparts(file);
       sep = ',';
@@ -200,10 +222,13 @@ function ret = read_file(file, sep, heads)
   ret = fread (f, 'char=>char').';
   fclose(f);
   
-  % check end of line
+  % check for double space
+  ret = regexprep (ret,'\r\n','\n');
+  ret = regexprep (ret,[sep '\n'],'\n');
+  ret = regexprep (ret,[sep '+'],sep);
+
+% check end of line
   if tmp(end)~=sprintf(sep)
-	ret = regexprep (ret,'\r\n','\n');
-    ret = regexprep (ret,[sep '\n'],'\n');
     ret = regexprep (ret,'\n',[sep '\n']);
     num_sep = num_sep + 1;
   end
@@ -212,10 +237,14 @@ function ret = read_file(file, sep, heads)
 
   % parsing values
   ret = regexp(ret,sep,'split');
-
+  
+  % remove empty fields
+  ret = ret(~cellfun(@isempty,ret));
+  
   % format output
   % delete empty last field
-  if mod(size(ret,2),num_sep)~=0
+  if mod(size(ret,2),num_sep)
+      warning(['Corruption: probably some empty field in ' file '. Use N/A.'])
     % yes, because we split after each separator
     if numel(ret{1,end}) == 0
       ret = ret(1,1:end-1);
