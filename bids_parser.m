@@ -95,12 +95,17 @@ for isub = 1:length(subjects)
               
        %% Loop over nifti files
        sesdir = fullfile(subdir,ses_list{sesj});
-       [im_list, im_path] = sct_tools_ls(fullfile(sesdir,'*.nii.gz'),0,1,2,1);
+       [im_list, im_path] = sct_tools_ls(fullfile(sesdir,'*.nii*'),0,1,2,1);
        [~,types] = cellfun(@(x) fileparts(x(1:end-1)), im_path, 'uni', false);
        if isub==1 && sesj==1, BIDS.datatype = unique(types); end
+
        for imj = 1:length(im_list)
-           % type and filename
-           [~,type] = fileparts(fileparts(im_path{imj}));
+           if strcmp(im_path{imj}(1:end-1),sesdir)
+               type = 'image';
+           else
+               % type and filename
+               [~,type] = fileparts(fileparts(im_path{imj}));
+           end
            if isfield(BIDS.subjects(end),type)
              BIDS.subjects(end).(type)(end+1).filename = im_list{imj};
              else
@@ -125,7 +130,7 @@ for isub = 1:length(subjects)
            end
            
            % read acquisition properties
-           infofile = strrep(fullfile(im_path{imj},im_list{imj}),'.nii.gz','.json');
+           infofile = regexprep(fullfile(im_path{imj},im_list{imj}),'\.nii(\.gz)?','.json');
            if exist(infofile,'file')
                props = loadjson(infofile);
                for ff = fieldnames(props)'
